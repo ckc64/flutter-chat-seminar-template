@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_chat/widgets/message_bubble.dart';
+import 'package:flutter_slidable/flutter_slidable.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
@@ -73,9 +74,33 @@ class _ChatScreenState extends State<ChatScreen> {
                             isSentByUser
                                 ? Alignment.centerRight
                                 : Alignment.centerLeft, // Align based on sender
-                        child: MessageBubble(
-                          message: _messages[index],
-                          isMe: isSentByUser,
+                        child: Slidable(
+                          endActionPane:
+                              isSentByUser
+                                  ? ActionPane(
+                                    motion: const ScrollMotion(),
+                                    children: [
+                                      SlidableAction(
+                                        onPressed: (_) {},
+                                        backgroundColor: Colors.blue,
+                                        foregroundColor: Colors.white,
+                                        icon: Icons.edit,
+                                        label: 'Edit',
+                                      ),
+                                      SlidableAction(
+                                        onPressed: (_) {},
+                                        backgroundColor: Colors.red,
+                                        foregroundColor: Colors.white,
+                                        icon: Icons.delete,
+                                        label: 'Delete',
+                                      ),
+                                    ],
+                                  )
+                                  : null,
+                          child: MessageBubble(
+                            message: _messages[index],
+                            isMe: isSentByUser,
+                          ),
                         ),
                       ),
                     );
