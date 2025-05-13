@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../models/message.dart';
 
 class MessageBubble extends StatelessWidget {
-  final String message;
+  final Message message;
   final bool isMe;
 
   const MessageBubble({super.key, required this.message, required this.isMe});
@@ -27,11 +28,29 @@ class MessageBubble extends StatelessWidget {
           crossAxisAlignment:
               isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
           children: [
+            if (!isMe) // Show username only for messages from others
+              Text(
+                message.username,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                  color: Colors.black87,
+                ),
+              ),
+            const SizedBox(height: 5),
             Text(
-              message,
+              message.text,
               style: TextStyle(
                 color: isMe ? Colors.white : Colors.black,
                 fontSize: 16,
+              ),
+            ),
+            const SizedBox(height: 5),
+            Text(
+              DateFormat('hh:mm a').format(message.timestamp.toDate()),
+              style: TextStyle(
+                color: isMe ? Colors.white70 : Colors.black54,
+                fontSize: 12,
               ),
             ),
           ],
