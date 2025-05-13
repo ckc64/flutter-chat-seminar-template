@@ -1,4 +1,8 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_chat/auth_screen.dart';
+import 'package:flutter_chat/models/message.dart';
 import 'package:flutter_chat/widgets/message_bubble.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 
@@ -10,34 +14,40 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> {
-  final List<String> _messages = []; // List to store messages
-  final TextEditingController _controller =
-      TextEditingController(); // Controller for TextField
-  final ScrollController _scrollController =
-      ScrollController(); // Controller for ListView scrolling
+  final TextEditingController _messageController = TextEditingController();
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  void _sendMessage() {
-    if (_controller.text.trim().isNotEmpty) {
-      setState(() {
-        _messages.add(_controller.text.trim()); // Add message to the list
-        _controller.clear(); // Clear the input field
-      });
-      // _scrollToBottom(); // Scroll to the latest message
+  Future<void> _sendMessage() async {
+    if (_messageController.text.trim().isEmpty || _auth.currentUser == null) {
+      return;
     }
-  }
 
-  void _scrollToBottom() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
-        _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
-      }
-    });
+    try {
+      await _firestore.collection('messages').add({
+        'text': _messageController.text.trim(),
+        'uid': _auth.currentUser!.uid,
+        'username':
+            _auth.currentUser!.displayName ??
+            'Guest', // Include username in the message
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+
+      // Reset typing status after sending the message
+      await _firestore.collection('typing').doc(_auth.currentUser!.uid).set({
+        'isTyping': false,
+      });
+
+      _messageController.clear();
+    } catch (e) {
+      debugPrint('Error sending message: $e');
+    }
   }
 
   @override
   void dispose() {
-    _controller.dispose(); // Dispose of the TextEditingController
-    _scrollController.dispose(); // Dispose of the ScrollController
+    _messageController.dispose(); // Dispose of the TextEditingController
+
     super.dispose();
   }
 
@@ -50,7 +60,10 @@ class _ChatScreenState extends State<ChatScreen> {
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () {
-              // Handle logout logic here
+              FirebaseAuth.instance.signOut();
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(builder: (context) => const AuthScreen()),
+              );
             },
           ),
         ],
@@ -61,22 +74,38 @@ class _ChatScreenState extends State<ChatScreen> {
           child: Column(
             children: [
               Expanded(
-                child: ListView.builder(
-                  controller: _scrollController, // Attach ScrollController
-                  itemCount: _messages.length,
-                  itemBuilder: (context, index) {
-                    final isSentByUser =
-                        index % 2 == 0; // Example logic for alignment
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4.0),
-                      child: Align(
-                        alignment:
-                            isSentByUser
-                                ? Alignment.centerRight
-                                : Alignment.centerLeft, // Align based on sender
-                        child: Slidable(
+                child: StreamBuilder<QuerySnapshot>(
+                  stream:
+                      _firestore
+                          .collection('messages')
+                          .orderBy('timestamp', descending: true)
+                          .snapshots(),
+                  builder: (context, snapshot) {
+                    if (snapshot.hasError) {
+                      return const Center(child: Text('Something went wrong'));
+                    }
+
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+
+                    final messages =
+                        snapshot.data!.docs
+                            .map((doc) => Message.fromFirestore(doc))
+                            .toList();
+
+                    final currentUser = FirebaseAuth.instance.currentUser;
+
+                    return ListView.builder(
+                      reverse: true,
+                      padding: const EdgeInsets.all(8),
+                      itemCount: messages.length,
+                      itemBuilder: (context, index) {
+                        final message = messages[index];
+                        final isCurrentUser = message.uid == currentUser?.uid;
+                        return Slidable(
                           endActionPane:
-                              isSentByUser
+                              isCurrentUser
                                   ? ActionPane(
                                     motion: const ScrollMotion(),
                                     children: [
@@ -98,11 +127,11 @@ class _ChatScreenState extends State<ChatScreen> {
                                   )
                                   : null,
                           child: MessageBubble(
-                            message: _messages[index],
-                            isMe: isSentByUser,
+                            message: message.text,
+                            isMe: isCurrentUser,
                           ),
-                        ),
-                      ),
+                        );
+                      },
                     );
                   },
                 ),
@@ -112,7 +141,8 @@ class _ChatScreenState extends State<ChatScreen> {
                 children: [
                   Expanded(
                     child: TextField(
-                      controller: _controller, // Attach controller to TextField
+                      controller:
+                          _messageController, // Attach controller to TextField
                       decoration: const InputDecoration(
                         hintText: 'Type a message',
                         border: OutlineInputBorder(),
